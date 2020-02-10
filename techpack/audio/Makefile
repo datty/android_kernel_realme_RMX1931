@@ -1,3 +1,9 @@
+
+ifeq ($(CONFIG_ARCH_SM8150), y)
+include $(srctree)/techpack/audio/config/sm8150auto.conf
+export
+endif
+
 # Use USERINCLUDE when you must reference the UAPI directories only.
 USERINCLUDE     += \
                 -I$(srctree)/techpack/audio/include/uapi \
