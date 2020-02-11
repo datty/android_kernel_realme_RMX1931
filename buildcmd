@@ -1,0 +1,14 @@
+make clean
+make mrproper
+export PATH="/opt/androidtoolchain/bin:/opt/androidtoolchain/aarch64-linux-android-4.9/bin:${PATH}"
+export OPPO_TARGET_DEVICE=MSM_19781
+export OPPO_BUILD_TYPE=release
+export TARGET_PRODUCT=msmnile
+export ARCH=arm64
+export SUBARCH=arm64
+export DTC_EXT=dtc
+
+make clean
+
+make -j$(nproc --all) O=out_${GIT_BRANCH} ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-android- realme_defconfig
+make -j$(nproc --all) O=out_${GIT_BRANCH} ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-android- dtbs Image.gz-dtb Image-dtb modules
