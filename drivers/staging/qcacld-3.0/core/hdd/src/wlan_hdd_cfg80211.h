@@ -132,7 +132,16 @@ static inline void wlan_hdd_clear_link_layer_stats(struct hdd_adapter *adapter) 
 #endif
 
 #define MAX_CHANNEL (NUM_24GHZ_CHANNELS + NUM_5GHZ_CHANNELS)
+#ifndef VENDOR_EDIT
+//Chuanye.Xu@PSW.CN.Wifi.Connect.Scan.1234999, 2018/02/22,
+//Modify for scan more hidden AP
+/*
 #define MAX_SCAN_SSID 10
+*/
+#else /* VENDOR_EDIT */
+#define MAX_SCAN_SSID 16
+#endif /* VENDOR_EDIT */
+
 
 #define IS_CHANNEL_VALID(channel) ((channel >= 0 && channel < 15) \
 			|| (channel >= 36 && channel <= 184))
@@ -203,6 +212,13 @@ typedef enum {
 
 /* Support Tx Power Limit setting */
 #define WIFI_FEATURE_SET_TX_POWER_LIMIT 0x4000000
+
+#ifdef VENDOR_EDIT
+//JiaoBo@PSW.CN.WiFi.Basic.Custom.1130116, 2019/05/07,
+//Add for get DBS support or not
+#define WIFI_FEATURE_DBS_CAPABILITY_1X1 0x10000000
+#define WIFI_FEATURE_DBS_CAPABILITY_2X2 0x20000000
+#endif
 
 /* Add more features here */
 #define WIFI_TDLS_SUPPORT			BIT(0)

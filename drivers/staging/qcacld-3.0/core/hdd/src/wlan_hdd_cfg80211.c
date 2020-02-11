@@ -2942,6 +2942,12 @@ __wlan_hdd_cfg80211_get_supported_features(struct wiphy *wiphy,
 	uint32_t fset = 0;
 	int ret;
 
+#ifdef VENDOR_EDIT
+	//JiaoBo@PSW.CN.WiFi.Basic.Custom.1130116, 2019/05/07,
+	//Add for get DBS support or not
+	bool one_by_one_dbs, two_by_two_dbs;
+#endif
+
 	/* ENTER_DEV() intentionally not used in a frequently invoked API */
 
 	if (QDF_GLOBAL_FTM_MODE == hdd_get_conparam()) {
@@ -2984,12 +2990,17 @@ __wlan_hdd_cfg80211_get_supported_features(struct wiphy *wiphy,
 		hdd_debug("NAN is supported by firmware");
 		fset |= WIFI_FEATURE_NAN;
 	}
+#ifndef VENDOR_EDIT
+//#Min.Yi@PSW.CN.WiFi.Hardware.OpCustomized.1123073, 2017/10/09,
+//delete for CTS test fail
 	if (sme_is_feature_supported_by_fw(RTT) &&
 	    hdd_ctx->config->enable_rtt_support) {
 		hdd_debug("RTT is supported by firmware and framework");
 		fset |= WIFI_FEATURE_D2D_RTT;
 		fset |= WIFI_FEATURE_D2AP_RTT;
 	}
+#endif /* VENDOR_EDIT */
+
 #ifdef FEATURE_WLAN_SCAN_PNO
 	if (hdd_ctx->config->configPNOScanSupport &&
 	    sme_is_feature_supported_by_fw(PNO)) {
@@ -3030,6 +3041,28 @@ __wlan_hdd_cfg80211_get_supported_features(struct wiphy *wiphy,
 	    sme_is_feature_supported_by_fw(VDEV_LATENCY_CONFIG)) {
 		fset |= WIFI_FEATURE_SET_LATENCY_MODE;
 	}
+
+#ifdef VENDOR_EDIT
+	//JiaoBo@PSW.CN.WiFi.Basic.Custom.1130116, 2019/05/07,
+	//Add for get DBS support or not
+	ret = policy_mgr_get_dbs_hw_modes(hdd_ctx->psoc,
+				&one_by_one_dbs, &two_by_two_dbs);
+
+	if (QDF_STATUS_SUCCESS == ret) {
+		if (one_by_one_dbs)
+			fset |= WIFI_FEATURE_DBS_CAPABILITY_1X1;
+
+		if (two_by_two_dbs)
+			fset |= WIFI_FEATURE_DBS_CAPABILITY_2X2;
+
+		if (!one_by_one_dbs && !two_by_two_dbs)
+			fset &= ~(WIFI_FEATURE_DBS_CAPABILITY_2X2 | WIFI_FEATURE_DBS_CAPABILITY_1X1);
+	} else {
+		hdd_err("wma_get_dbs_hw_mode failed");
+		fset &= ~(WIFI_FEATURE_DBS_CAPABILITY_2X2 | WIFI_FEATURE_DBS_CAPABILITY_1X1);
+	}
+#endif
+
 	skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, sizeof(fset) +
 						  NLMSG_HDRLEN);
 	if (!skb) {
@@ -8567,7 +8600,13 @@ __wlan_hdd_cfg80211_set_ns_offload(struct wiphy *wiphy,
 
 	if (!hdd_ctx->config->active_mode_offload) {
 		hdd_warn("Active mode offload is disabled");
+		#ifndef VENDOR_EDIT
+		//Botao.Cu@PSW.CN.WiFi.Connect.auth.1189028, 2017/12/31,
+		//modify the return value for VTS test
 		return -EINVAL;
+		#else
+		return 0;
+		#endif /* VENDOR_EDIT */
 	}
 
 	if (wlan_cfg80211_nla_parse(tb, QCA_WLAN_VENDOR_ATTR_ND_OFFLOAD_MAX,
@@ -10990,6 +11029,178 @@ static int wlan_hdd_process_wake_lock_stats(struct hdd_context *hdd_ctx)
 }
 #endif
 
+//#ifdef VENDOR_EDIT
+//Lei.Zhang@PSW.CN.WiFi.Hardware.Power.2063020, 2019/05/31
+//Add power_stats for WiFi FW wakeup/suspend time statistics
+#define POWER_STATS_BUF_LEN	256
+
+struct power_stats_priv_ps {
+	struct power_stats_response power_stats;
+};
+
+static void wlan_hdd_power_stats_dealloc(void *priv)
+{
+	struct power_stats_priv_ps *stats = priv;
+
+	qdf_mem_free(stats->power_stats.debug_registers);
+	stats->power_stats.debug_registers = NULL;
+}
+
+static void wlan_hdd_get_power_stats_cb(struct power_stats_response *response,
+				    void *context)
+{
+	struct osif_request *request;
+	struct power_stats_priv_ps *priv;
+	uint32_t *debug_registers;
+	uint32_t debug_registers_len;
+
+	hdd_enter();
+
+	request = osif_request_get(context);
+	if (!request) {
+		hdd_err("Obsolete request");
+		return;
+	}
+
+	priv = osif_request_priv(request);
+
+	/* copy fixed-sized data */
+	priv->power_stats = *response;
+
+	/* copy variable-size data */
+	if (response->num_debug_register) {
+		debug_registers_len = (sizeof(response->debug_registers[0]) *
+				       response->num_debug_register);
+		debug_registers = qdf_mem_malloc(debug_registers_len);
+		priv->power_stats.debug_registers = debug_registers;
+		if (debug_registers) {
+			qdf_mem_copy(debug_registers,
+				     response->debug_registers,
+				     debug_registers_len);
+		} else {
+			hdd_err("Power stats memory alloc fails!");
+			priv->power_stats.num_debug_register = 0;
+		}
+	}
+	osif_request_complete(request);
+	osif_request_put(request);
+	hdd_exit();
+}
+
+static int wlan_hdd_get_power_stats(struct hdd_context *hdd_ctx, char *ps, ssize_t len)
+{
+	QDF_STATUS status;
+	struct power_stats_response *chip_power_stats;
+	ssize_t ret_cnt = 0;
+	void *cookie;
+	struct osif_request *request;
+	struct power_stats_priv_ps *priv;
+	static const struct osif_request_params params = {
+		.priv_size = sizeof(*priv),
+		.timeout_ms = WLAN_WAIT_TIME_STATS,
+		.dealloc = wlan_hdd_power_stats_dealloc,
+	};
+	unsigned char buf[POWER_STATS_BUF_LEN] = {0};
+
+	hdd_enter();
+
+	ret_cnt = wlan_hdd_validate_context(hdd_ctx);
+	if (ret_cnt)
+		return ret_cnt;
+
+	request = osif_request_alloc(&params);
+	if (!request) {
+		hdd_err("Request allocation failure");
+		return -ENOMEM;
+	}
+	cookie = osif_request_cookie(request);
+
+	status = sme_power_debug_stats_req(hdd_ctx->mac_handle,
+					   wlan_hdd_get_power_stats_cb,
+					   cookie);
+	if (QDF_IS_STATUS_ERROR(status)) {
+		hdd_err("chip power stats request failed");
+		goto cleanup;
+	}
+
+	ret_cnt = osif_request_wait_for_response(request);
+	if (ret_cnt) {
+		hdd_err("Target response timed out Power stats");
+		goto cleanup;
+	}
+	priv = osif_request_priv(request);
+	chip_power_stats = &priv->power_stats;
+
+	scnprintf(buf, POWER_STATS_BUF_LEN, "%d:%d", chip_power_stats->cumulative_sleep_time_ms, chip_power_stats->cumulative_total_on_time_ms);
+	if (strlen(buf) < len) {
+		memcpy(ps, buf, strlen(buf));
+	} else {
+		ret_cnt = -ENOMEM;
+	}
+
+cleanup:
+	osif_request_put(request);
+	return ret_cnt;
+}
+
+static int wlan_hdd_send_power_stats(struct hdd_context *hdd_ctx, char *ps)
+{
+	struct sk_buff *skb;
+	uint32_t nl_buf_len;
+
+	hdd_enter();
+
+	nl_buf_len = NLMSG_HDRLEN;
+	nl_buf_len += sizeof(uint32_t) + POWER_STATS_BUF_LEN + 1 + NLA_HDRLEN*2;
+
+	skb = cfg80211_vendor_cmd_alloc_reply_skb(hdd_ctx->wiphy, nl_buf_len);
+	if (!skb) {
+		hdd_err("wlan_hdd_cfg80211_send_power_stats alloc skb failed");
+		return -ENOMEM;
+	}
+
+	if (nla_put_u32(skb, OPPO_WLAN_VENDOR_ATTR_PS_REQ, 0x19900102)) {
+		hdd_err("nla put failure OPPO_WLAN_VENDOR_ATTR_PS_REQ");
+		goto nla_put_failure;
+	}
+
+	if (nla_put_string(skb, OPPO_WLAN_VENDOR_ATTR_PS_RES, ps)) {
+		hdd_err("nla put failure OPPO_WLAN_VENDOR_ATTR_PS_RES");
+		goto nla_put_failure;
+	}
+
+	if(cfg80211_vendor_cmd_reply(skb)) {
+		hdd_err("send response error");
+		goto nla_put_failure;
+	}
+
+	hdd_exit();
+
+	return 0;
+
+nla_put_failure:
+	kfree_skb(skb);
+	return -EINVAL;
+}
+
+static int wlan_hdd_cfg80211_get_power_stats(struct hdd_context *hdd_ctx)
+{
+	char ps[POWER_STATS_BUF_LEN] = {0};
+
+	if (wlan_hdd_get_power_stats(hdd_ctx, ps, POWER_STATS_BUF_LEN)) {
+		hdd_err("wlan_hdd_get_power_stats fail");
+		return -EINVAL;
+	}
+
+	if (wlan_hdd_send_power_stats(hdd_ctx, ps)) {
+		hdd_err("wlan_hdd_cfg80211_send_power_stats fail");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+//#endif /* VENDOR_EDIT */
+
 /**
  * __wlan_hdd_cfg80211_get_wakelock_stats() - gets wake lock stats
  * @wiphy: wiphy pointer
@@ -11011,6 +11222,17 @@ static int __wlan_hdd_cfg80211_get_wakelock_stats(struct wiphy *wiphy,
 {
 	int ret;
 	struct hdd_context *hdd_ctx = wiphy_priv(wiphy);
+	//#ifdef VENDOR_EDIT
+        //Lei.Zhang@PSW.CN.WiFi.Hardware.Power.2063020, 2019/05/31
+        //Add power_stats for WiFi FW wakeup/suspend time statistics
+	int32_t status;
+	struct nlattr* tb[OPPO_WLAN_VENDOR_ATTR_PS_MAX + 1];
+
+	static const struct nla_policy oppo_attr_power_stats_policy[OPPO_WLAN_VENDOR_ATTR_PS_MAX + 1] = {
+		[OPPO_WLAN_VENDOR_ATTR_PS_REQ] = {.type = NLA_U32},
+		[OPPO_WLAN_VENDOR_ATTR_PS_RES] = {.type = NLA_U8},
+	};
+	//#endif /* VENDOR_EDIT */
 
 	hdd_enter();
 
@@ -11023,7 +11245,21 @@ static int __wlan_hdd_cfg80211_get_wakelock_stats(struct wiphy *wiphy,
 	if (0 != ret)
 		return -EINVAL;
 
+	//#ifdef VENDOR_EDIT
+        //Lei.Zhang@PSW.CN.WiFi.Hardware.Power.2063020, 2019/05/31
+        //Add power_stats for WiFi FW wakeup/suspend time statistics
+	status = wlan_cfg80211_nla_parse(tb, OPPO_WLAN_VENDOR_ATTR_PS_MAX,
+					data, data_len, oppo_attr_power_stats_policy);
+
+	if (!status && tb[OPPO_WLAN_VENDOR_ATTR_PS_REQ] && nla_get_u32(tb[OPPO_WLAN_VENDOR_ATTR_PS_REQ]) == 0x20170827) {
+		ret = wlan_hdd_cfg80211_get_power_stats(hdd_ctx);
+		goto exit_with_ret;
+	}
+	//#endif /* VENDOR_EDIT */
+
 	ret = wlan_hdd_process_wake_lock_stats(hdd_ctx);
+
+exit_with_ret:
 	hdd_exit();
 	return ret;
 }
@@ -14165,6 +14401,151 @@ static int __wlan_hdd_cfg80211_fetch_bss_transition_status(struct wiphy *wiphy,
 	return cfg80211_vendor_cmd_reply(reply_skb);
 }
 
+#ifdef VENDOR_EDIT
+//Laixin@PSW.CN.WiFi.Basic.Softap.1190360, 2018/03/06
+//Add for: hotspot manager
+static const struct nla_policy
+oppo_attr_policy[OPPO_WLAN_VENDOR_ATTR_MAX + 1] = {
+	[OPPO_WLAN_VENDOR_ATTR_MAC_ADDR] = {.type = NLA_BINARY, .len = QDF_MAC_ADDR_SIZE},
+	[OPPO_WLAN_VENDOR_ATTR_WETHER_BLOCK_CLIENT] = {.type = NLA_U8},
+	[OPPO_WLAN_VENDOR_ATTR_SAP_MAX_CLIENT_NUM] = {.type = NLA_U32},
+};
+
+static int __wlan_hdd_cfg80211_oppo_modify_acl(struct wiphy *wiphy,
+					struct wireless_dev *wdev,
+					const void *data, int data_len)
+{
+	int32_t status;
+	struct nlattr* tb[OPPO_WLAN_VENDOR_ATTR_MAX + 1];
+	uint8_t extra[8];
+	int8_t block;
+
+	hdd_enter();
+
+	status = wlan_cfg80211_nla_parse(tb, OPPO_WLAN_VENDOR_ATTR_MAX,
+					data, data_len, oppo_attr_policy);
+	if (status) {
+		hdd_err("Invalid attributes!");
+		status = -EINVAL;
+		goto out;
+	}
+
+	if (tb[OPPO_WLAN_VENDOR_ATTR_MAC_ADDR]) {
+		nla_memcpy(extra, tb[OPPO_WLAN_VENDOR_ATTR_MAC_ADDR], QDF_MAC_ADDR_SIZE);
+	} else {
+		hdd_err("Invalid argument:No sta mac addr provided!");
+		status = -EINVAL;
+		goto out;
+	}
+	if (tb[OPPO_WLAN_VENDOR_ATTR_WETHER_BLOCK_CLIENT]) {
+		block = nla_get_u8(tb[OPPO_WLAN_VENDOR_ATTR_WETHER_BLOCK_CLIENT]);
+	} else {
+		hdd_err("Invalid argument:No block value!");
+		status = -EINVAL;
+		goto out;
+	}
+
+	//we always modify black list, as for now
+	extra[6] = 0;
+	extra[7] = block;
+
+	status = oppo_wlan_hdd_modify_acl(wdev->netdev, (char*)extra);
+	if (0 != status) {
+		hdd_err("failed to modify acl! %d", status);
+		goto out;
+	}
+
+out:
+	hdd_exit();
+	return status;
+}
+
+/**
+ * wlan_hdd_cfg80211_oppo_modify_acl() - modify acl
+ * @wiphy: Pointer to wiphy
+ * @wdev: Pointer to wireless device
+ * @data: vendor command extra data
+ * @data_len: the size of extra data
+ *
+ * Return: 0 for success, non-zero for failure
+ */
+static int wlan_hdd_cfg80211_oppo_modify_acl(struct wiphy *wiphy,
+				  struct wireless_dev *wdev,
+				  const void *data, int data_len)
+{
+	int ret;
+
+	cds_ssr_protect(__func__);
+	ret = __wlan_hdd_cfg80211_oppo_modify_acl(wiphy, wdev, data, data_len);
+	cds_ssr_unprotect(__func__);
+
+	return ret;
+}
+
+static int __wlan_hdd_cfg80211_oppo_set_max_assoc(struct wiphy *wiphy,
+					  struct wireless_dev *wdev,
+					  const void *data, int data_len)
+{
+	uint32_t status;
+	int extra[2];
+	uint32_t max_clients;
+	struct nlattr* tb[OPPO_WLAN_VENDOR_ATTR_MAX + 1];
+
+	hdd_enter();
+
+	status = wlan_cfg80211_nla_parse(tb, OPPO_WLAN_VENDOR_ATTR_MAX,
+					data, data_len, oppo_attr_policy);
+
+	if (status) {
+		hdd_err("Invalid attributes!");
+		status = -EINVAL;
+		goto out;
+	}
+
+	if (tb[OPPO_WLAN_VENDOR_ATTR_SAP_MAX_CLIENT_NUM]) {
+		max_clients = nla_get_u32(tb[OPPO_WLAN_VENDOR_ATTR_SAP_MAX_CLIENT_NUM]);
+	} else {
+		hdd_err("Invalid argument!");
+		status = -EINVAL;
+		goto out;
+	}
+
+	extra[0] = QCSAP_PARAM_MAX_ASSOC;
+	extra[1] = max_clients;
+
+	status = oppo_wlan_hdd_set_max_assoc(wdev->netdev, (char*)extra);
+	if (0 != status) {
+		hdd_err("failed to set max assoc!");
+		goto out;
+	}
+
+out:
+	hdd_exit();
+	return status;
+}
+
+/**
+ * wlan_hdd_cfg80211_oppo_set_max_assoc() - modify acl
+ * @wiphy: Pointer to wiphy
+ * @wdev: Pointer to wireless device
+ * @data: vendor command extra data
+ * @data_len: the size of extra data
+ *
+ * Return: 0 for success, non-zero for failure
+ */
+static int wlan_hdd_cfg80211_oppo_set_max_assoc(struct wiphy *wiphy,
+					  struct wireless_dev *wdev,
+					  const void *data, int data_len)
+{
+	int ret;
+	cds_ssr_protect(__func__);
+	ret = __wlan_hdd_cfg80211_oppo_set_max_assoc(wiphy, wdev, data, data_len);
+	cds_ssr_unprotect(__func__);
+
+	return ret;
+}
+#endif /* VENDOR_EDIT */
+
 /**
  * wlan_hdd_cfg80211_fetch_bss_transition_status() - fetch bss transition status
  * @wiphy : WIPHY structure pointer
@@ -14717,14 +15098,18 @@ const struct wiphy_vendor_command hdd_wiphy_vendor_commands[] = {
 			 WIPHY_VENDOR_CMD_NEED_NETDEV,
 		.doit = wlan_hdd_cfg80211_get_logger_supp_feature
 	},
-	{
-		.info.vendor_id = QCA_NL80211_VENDOR_ID,
-		.info.subcmd = QCA_NL80211_VENDOR_SUBCMD_TRIGGER_SCAN,
-		.flags = WIPHY_VENDOR_CMD_NEED_WDEV |
-			WIPHY_VENDOR_CMD_NEED_NETDEV |
-			WIPHY_VENDOR_CMD_NEED_RUNNING,
-		.doit = wlan_hdd_cfg80211_vendor_scan
-	},
+#ifndef VENDOR_EDIT
+	//Chuanye.Xu@PSW.CN.WiFi.Connect.smartWifi.1058483, 2017/11/20,
+	//Remove for bug 1148060:get hidden AP after connect.
+		{
+			.info.vendor_id = QCA_NL80211_VENDOR_ID,
+			.info.subcmd = QCA_NL80211_VENDOR_SUBCMD_TRIGGER_SCAN,
+			.flags = WIPHY_VENDOR_CMD_NEED_WDEV |
+				WIPHY_VENDOR_CMD_NEED_NETDEV |
+				WIPHY_VENDOR_CMD_NEED_RUNNING,
+			.doit = wlan_hdd_cfg80211_vendor_scan
+		},
+#endif /* VENDOR_EDIT */
 
 	/* Vendor abort scan */
 	{
@@ -15070,6 +15455,26 @@ const struct wiphy_vendor_command hdd_wiphy_vendor_commands[] = {
 	FEATURE_COEX_CONFIG_COMMANDS
 	FEATURE_MPTA_HELPER_COMMANDS
 	FEATURE_HW_CAPABILITY_COMMANDS
+	#ifdef VENDOR_EDIT
+	//Laixin@PSW.CN.WiFi.Basic.SoftAp.1190360, 2018/03/06
+	//add for: hotspot manager via wificond
+	{
+		.info.vendor_id = QCA_NL80211_VENDOR_ID,
+		.info.subcmd = OPPO_NL80211_VENDOR_SUBCMD_MODIFY_ACL,
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV |
+			 WIPHY_VENDOR_CMD_NEED_NETDEV |
+			 WIPHY_VENDOR_CMD_NEED_RUNNING,
+		.doit = wlan_hdd_cfg80211_oppo_modify_acl
+	},
+	{
+		.info.vendor_id = QCA_NL80211_VENDOR_ID,
+		.info.subcmd = OPPO_NL80211_VENDOR_SUBCMD_SET_MAX_ASSOC,
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV |
+		     WIPHY_VENDOR_CMD_NEED_NETDEV |
+			 WIPHY_VENDOR_CMD_NEED_RUNNING,
+		.doit = wlan_hdd_cfg80211_oppo_set_max_assoc
+	},
+#endif /* VENDOR_EDIT */
 };
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 12, 0)

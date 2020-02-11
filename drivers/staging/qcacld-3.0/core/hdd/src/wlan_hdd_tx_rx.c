@@ -1434,8 +1434,12 @@ static bool hdd_is_arp_local(struct sk_buff *skb)
 			arp_ptr += (skb->dev->addr_len + 4 +
 					skb->dev->addr_len);
 			memcpy(&tip, arp_ptr, 4);
+			#ifndef VENDOR_EDIT
+			//Jian.Wang@PSW.CN.WiFi.Basic.Log.1072015, 2017/12/29,
+			//delete more log
 			hdd_debug("ARP packet: local IP: %x dest IP: %x",
 				ifa->ifa_local, tip);
+			#endif /* VENDOR_EDIT */
 			if (ifa->ifa_local == tip)
 				return true;
 		}

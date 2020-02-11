@@ -1098,7 +1098,12 @@ hdd_suspend_wlan(void)
 
 	return 0;
 }
-
+//yangmingjin@BSP.POWER.Basic 2019/05/27 add for RM_TAG_POWER_DEBUG
+#ifdef VENDOR_EDIT
+extern char host_wakeup_info[240];
+extern int info_count;
+#endif
+/*VENDOR_EDIT*/
 /**
  * hdd_resume_wlan() - Driver resume function
  *
@@ -1152,6 +1157,12 @@ static int hdd_resume_wlan(void)
 	if (QDF_IS_STATUS_ERROR(status))
 		return qdf_status_to_os_return(status);
 
+//yangmingjin@BSP.POWER.Basic 2019/05/27 add for RM_TAG_POWER_DEBUG
+#ifdef VENDOR_EDIT
+	host_wakeup_info[info_count] = '\0';
+	pr_info("RM_POWER_WLAN: %s\n", host_wakeup_info);
+#endif
+/*VENDOR_EDIT*/
 	return 0;
 }
 
@@ -2048,7 +2059,7 @@ static int __wlan_hdd_cfg80211_set_txpower(struct wiphy *wiphy,
 {
 	struct hdd_context *hdd_ctx = (struct hdd_context *) wiphy_priv(wiphy);
 	mac_handle_t mac_handle;
-	struct hdd_adapter *adapter;
+	struct hdd_adapter *adapter = WLAN_HDD_GET_PRIV_PTR(wdev->netdev);
 	struct qdf_mac_addr bssid = QDF_MAC_ADDR_BCAST_INIT;
 	struct qdf_mac_addr selfmac;
 	QDF_STATUS status;
@@ -2056,13 +2067,6 @@ static int __wlan_hdd_cfg80211_set_txpower(struct wiphy *wiphy,
 	int dbm;
 
 	hdd_enter();
-
-	if (!wdev) {
-		hdd_err("wdev is null, set tx power failed");
-		return -EIO;
-	}
-
-	adapter = WLAN_HDD_GET_PRIV_PTR(wdev->netdev);
 
 	if (QDF_GLOBAL_FTM_MODE == hdd_get_conparam()) {
 		hdd_err("Command not allowed in FTM mode");

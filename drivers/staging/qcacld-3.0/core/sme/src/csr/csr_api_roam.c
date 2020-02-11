@@ -16003,9 +16003,16 @@ QDF_STATUS csr_send_join_req_msg(tpAniSirGlobal pMac, uint32_t sessionId,
 				sme_debug("1x1 with 1 Chain AP");
 		}
 
+#ifndef VENDOR_EDIT
+//#Yuan.Huang@PSW.CN.WiFi.Network.internet.1809314, 2019/07/24,
+//#Add for Dual STA connect leaky APs with 1x1
 		if (pMac->roam.configParam.is_force_1x1 &&
 		    pMac->lteCoexAntShare &&
 		    is_vendor_ap_present) {
+#else /* VENDOR_EDIT */
+		if (pMac->roam.configParam.is_force_1x1 &&
+		    is_vendor_ap_present) {
+#endif /* VENDOR_EDIT */
 			pSession->supported_nss_1x1 = true;
 			pSession->vdev_nss = 1;
 			pSession->nss = 1;
@@ -16038,8 +16045,14 @@ QDF_STATUS csr_send_join_req_msg(tpAniSirGlobal pMac, uint32_t sessionId,
 			ucfg_action_oui_search(pMac->psoc,
 					       &vendor_ap_search_attr,
 					       ACTION_OUI_SWITCH_TO_11N_MODE);
+#ifndef VENDOR_EDIT
+//#Yuan.Huang@PSW.CN.WiFi.Network.internet.1809314, 2019/07/24,
+//#Add for Dual STA connect leaky APs with 1x1
 		if (pMac->roam.configParam.is_force_1x1 &&
 		    pMac->lteCoexAntShare &&
+#else /* VENDOR_EDIT */
+		if (pMac->roam.configParam.is_force_1x1 &&
+#endif /* VENDOR_EDIT */
 		    is_vendor_ap_present &&
 		    (ucDot11Mode == WNI_CFG_DOT11_MODE_ALL ||
 		     ucDot11Mode == WNI_CFG_DOT11_MODE_11AC ||

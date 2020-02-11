@@ -177,6 +177,13 @@ QDF_STATUS hdd_set_sap_ht2040_mode(struct hdd_adapter *adapter,
 				   uint8_t channel_type);
 #endif
 
+#ifdef VENDOR_EDIT
+//Laixin@PSW.CN.WiFi.Basic.Softap.1190360, 2018/03/06
+//Add for: hotspot manager
+int oppo_wlan_hdd_modify_acl(struct net_device *dev, char* extra);
+int oppo_wlan_hdd_set_max_assoc(struct net_device *dev, char* extra);
+#endif /* VENDOR_EDIT */
+
 int wlan_hdd_cfg80211_stop_ap(struct wiphy *wiphy,
 			      struct net_device *dev);
 

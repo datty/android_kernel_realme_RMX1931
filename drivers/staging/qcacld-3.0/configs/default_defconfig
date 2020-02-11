@@ -327,6 +327,11 @@ ifneq ($(TARGET_BUILD_VARIANT),user)
 	CONFIG_WLAN_DEBUG_CRASH_INJECT := y
 endif
 
+#ifdef VENDOR_EDIT
+#Tao.Hui@PSW.CN.WiFi.Basic.Custom.1884719 2019/03/08
+    CONFIG_WLAN_DEBUG_CRASH_INJECT := y
+#endif
+
 #Enable WLAN/Power debugfs feature only if debug_fs is enabled
 ifeq ($(CONFIG_DEBUG_FS), y)
        # Flag to enable debugfs. Depends on CONFIG_DEBUG_FS in kernel

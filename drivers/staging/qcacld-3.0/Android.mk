@@ -80,6 +80,13 @@ $(shell ln -sf /mnt/vendor/persist/wlan_mac.bin $(TARGET_OUT_VENDOR)/firmware/wl
 else
 $(shell ln -sf /mnt/vendor/persist/wlan_mac.bin $(TARGET_OUT_ETC)/firmware/wlan/qca_cld/wlan_mac.bin)
 endif
+
+#Guotian.Wu@PSW.CN.WiFi.Basic.Crash.1340840, 2018/10/24,
+#Add for enable Self Recovery for crash in release version
+ifeq ($(OPPO_BUILD_TYPE),release)
+LOCAL_CFLAGS += -DENABLE_SELFRECORVERY
+endif
+
 endif # DLKM check
 endif # supported target check
 endif # WLAN enabled check

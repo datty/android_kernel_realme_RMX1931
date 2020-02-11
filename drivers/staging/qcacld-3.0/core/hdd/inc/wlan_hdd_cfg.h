@@ -1536,7 +1536,13 @@ enum hdd_dot11_mode {
 #define CFG_GLOBAL_ADAPTIVE_DWELL_MODE_NAME       "global_adapt_dwelltime_mode"
 #define CFG_GLOBAL_ADAPTIVE_DWELL_MODE_MIN        (0)
 #define CFG_GLOBAL_ADAPTIVE_DWELL_MODE_MAX        (4)
+#ifndef VENDOR_EDIT
+//Liqun.Zhang@PSW.CN.WiFi.Connect.Scan.1212303, 2018/1/22,
+//Modify for close scan adaptive
 #define CFG_GLOBAL_ADAPTIVE_DWELL_MODE_DEFAULT    (0)
+#else
+#define CFG_GLOBAL_ADAPTIVE_DWELL_MODE_DEFAULT    (1)
+#endif /* VENDOR_EDIT */
 
 /*
  * <ini>
@@ -8233,7 +8239,17 @@ enum hdd_link_speed_rpt_type {
 #define CFG_ENABLE_SELF_RECOVERY                   "gEnableSelfRecovery"
 #define CFG_ENABLE_SELF_RECOVERY_MIN               (0)
 #define CFG_ENABLE_SELF_RECOVERY_MAX               (1)
+//Guotian.Wu@PSW.CN.WiFi.Basic.Crash.1340840, 2018/10/24,
+//Add for enable Self Recovery for crash in release version
+#ifndef VENDOR_EDIT
 #define CFG_ENABLE_SELF_RECOVERY_DEFAULT           (0)
+#else
+#ifndef ENABLE_SELFRECORVERY
+#define CFG_ENABLE_SELF_RECOVERY_DEFAULT           (0)
+#else
+#define CFG_ENABLE_SELF_RECOVERY_DEFAULT           (1)
+#endif  /*ENABLE_SELFRECORVERY */
+#endif  /* VENDOR_EDIT */
 
 #define CFG_ENABLE_SAP_SUSPEND                     "gEnableSapSuspend"
 #define CFG_ENABLE_SAP_SUSPEND_MIN                 (0)
@@ -10992,7 +11008,13 @@ enum dot11p_mode {
 #define CFG_RX_WAKELOCK_TIMEOUT_NAME     "rx_wakelock_timeout"
 #define CFG_RX_WAKELOCK_TIMEOUT_DEFAULT  (50)
 #define CFG_RX_WAKELOCK_TIMEOUT_MIN      (0)
+#ifndef VENDOR_EDIT
 #define CFG_RX_WAKELOCK_TIMEOUT_MAX      (100)
+//Yuan.Huang@PSW.CN.WiFi.Network.internet.1064218, 2016/08/04,
+//Modify for QQ message delays when DUT is asleep
+#else
+#define CFG_RX_WAKELOCK_TIMEOUT_MAX      (300)
+#endif /* VENDOR_EDIT */
 
 /*
  * <ini>
@@ -15271,7 +15293,7 @@ enum hdd_external_acs_policy {
  * </ini>
  */
 #define CFG_ACTION_OUI_SWITCH_TO_11N_MODE_NAME    "gActionOUISwitchTo11nMode"
-#define CFG_ACTION_OUI_SWITCH_TO_11N_MODE_DEFAULT "00904C 03 0418BF E0 21 40"
+#define CFG_ACTION_OUI_SWITCH_TO_11N_MODE_DEFAULT "00904C 05 0418BF0CB2 F8 21 40"
 
 /*
  * <ini>

@@ -4388,6 +4388,7 @@ hdd_store_nss_chains_cfg_in_vdev(struct hdd_adapter *adapter)
 	struct mlme_nss_chains vdev_ini_cfg;
 	struct hdd_context *hdd_ctx = WLAN_HDD_GET_CTX(adapter);
 
+	qdf_mem_zero(&vdev_ini_cfg, sizeof(struct mlme_nss_chains));
 	/* Populate the nss chain params from ini for this vdev type */
 	hdd_fill_nss_chain_params(hdd_ctx, &vdev_ini_cfg, adapter->device_mode);
 
@@ -11633,6 +11634,7 @@ int hdd_wlan_stop_modules(struct hdd_context *hdd_ctx, bool ftm_mode)
 
 	/* Free the cache channels of the command SET_DISABLE_CHANNEL_LIST */
 	wlan_hdd_free_cache_channels(hdd_ctx);
+	hdd_driver_mem_cleanup();
 
 	/* Free the resources allocated while storing SAR config. These needs
 	 * to be freed only in the case when it is not SSR. As in the case of

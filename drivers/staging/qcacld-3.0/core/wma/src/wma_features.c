@@ -70,6 +70,13 @@
 #define ARRAY_LENGTH(a)         (sizeof(a) / sizeof((a)[0]))
 #endif
 
+//yangmingjin@BSP.POWER.Basic 2019/05/27 add for RM_TAG_POWER_DEBUG
+#ifdef VENDOR_EDIT
+#define HOST_WAKEUP_INFO_LEN 240
+char host_wakeup_info[HOST_WAKEUP_INFO_LEN];
+int info_count = 0;
+#endif
+/*VENDOR_EDIT*/
 /**
  * WMA_SET_VDEV_IE_SOURCE_HOST - Flag to identify the source of VDEV SET IE
  * command. The value is 0x0 for the VDEV SET IE WMI commands from mobile
@@ -2310,6 +2317,12 @@ static void wma_log_pkt_ipv4(uint8_t *data, uint32_t length)
 	ip_addr = (char *)(data + IPV4_SRC_ADDR_OFFSET);
 	WMA_LOGD("src addr %d:%d:%d:%d", ip_addr[0], ip_addr[1],
 		 ip_addr[2], ip_addr[3]);
+	//yangmingjin@BSP.POWER.Basic 2019/04/30 add for RM_TAG_POWER_DEBUG
+#ifdef VENDOR_EDIT
+		info_count += snprintf(host_wakeup_info+info_count, HOST_WAKEUP_INFO_LEN-info_count, "IP[%d:%d:%d:%d",
+			ip_addr[0], ip_addr[1],ip_addr[2], ip_addr[3]);
+#endif
+	/*VENDOR_EDIT*/
 	ip_addr = (char *)(data + IPV4_DST_ADDR_OFFSET);
 	WMA_LOGD("dst addr %d:%d:%d:%d", ip_addr[0], ip_addr[1],
 		 ip_addr[2], ip_addr[3]);
@@ -2319,6 +2332,12 @@ static void wma_log_pkt_ipv4(uint8_t *data, uint32_t length)
 		 qdf_cpu_to_be16(pkt_len),
 		 qdf_cpu_to_be16(src_port),
 		 qdf_cpu_to_be16(dst_port));
+//yangmingjin@BSP.POWER.Basic 2019/04/30 add for RM_TAG_POWER_DEBUG
+#ifdef VENDOR_EDIT
+	info_count += snprintf(host_wakeup_info+info_count, HOST_WAKEUP_INFO_LEN-info_count, "(%d)->%d:%d:%d:%d(%d)]",
+		src_port, ip_addr[0], ip_addr[1],ip_addr[2], ip_addr[3], dst_port);
+#endif
+/*VENDOR_EDIT*/
 }
 
 static void wma_log_pkt_ipv6(uint8_t *data, uint32_t length)
@@ -2337,6 +2356,14 @@ static void wma_log_pkt_ipv6(uint8_t *data, uint32_t length)
 		 ip_addr[9], ip_addr[10], ip_addr[11],
 		 ip_addr[12], ip_addr[13], ip_addr[14],
 		 ip_addr[15]);
+//yangmingjin@BSP.POWER.Basic 2019/04/30 add for RM_TAG_POWER_DEBUG
+#ifdef VENDOR_EDIT
+	info_count += snprintf(host_wakeup_info+info_count, HOST_WAKEUP_INFO_LEN-info_count, "IP["IPV6_ADDR_STR,
+		ip_addr[0],ip_addr[1], ip_addr[2], ip_addr[3], ip_addr[4],
+		ip_addr[5], ip_addr[6], ip_addr[7], ip_addr[8],ip_addr[9],
+		ip_addr[10], ip_addr[11],ip_addr[12], ip_addr[13], ip_addr[14],ip_addr[15]);
+#endif
+/*VENDOR_EDIT*/
 	ip_addr = (char *)(data + IPV6_DST_ADDR_OFFSET);
 	WMA_LOGD("dst addr "IPV6_ADDR_STR, ip_addr[0],
 		 ip_addr[1], ip_addr[2], ip_addr[3], ip_addr[4],
@@ -2350,6 +2377,14 @@ static void wma_log_pkt_ipv6(uint8_t *data, uint32_t length)
 		 qdf_cpu_to_be16(pkt_len),
 		 qdf_cpu_to_be16(src_port),
 		 qdf_cpu_to_be16(dst_port));
+//yangmingjin@BSP.POWER.Basic 2019/04/30 add for RM_TAG_POWER_DEBUG
+#ifdef VENDOR_EDIT
+	info_count += snprintf(host_wakeup_info+info_count, HOST_WAKEUP_INFO_LEN-info_count, "(%d)->"IPV6_ADDR_STR"(%d)]",
+		src_port, ip_addr[0],ip_addr[1], ip_addr[2], ip_addr[3], ip_addr[4],
+		ip_addr[5], ip_addr[6], ip_addr[7], ip_addr[8],ip_addr[9],ip_addr[10], ip_addr[11],
+		ip_addr[12], ip_addr[13], ip_addr[14],ip_addr[15], dst_port);
+#endif
+/*VENDOR_EDIT*/
 }
 
 static void wma_log_pkt_tcpv4(uint8_t *data, uint32_t length)
@@ -2491,7 +2526,12 @@ static void wma_wow_parse_data_pkt(t_wma_handle *wma,
 	proto_subtype_name = wma_pkt_proto_subtype_to_string(proto_subtype);
 	if (proto_subtype_name)
 		WMA_LOGI("WOW Wakeup: %s rcvd", proto_subtype_name);
-
+//yangmingjin@BSP.POWER.Basic 2019/05/27 add for RM_TAG_POWER_DEBUG
+#ifdef VENDOR_EDIT
+	info_count += snprintf(host_wakeup_info+info_count, HOST_WAKEUP_INFO_LEN-info_count, "protocol[%s] ",
+		wma_pkt_proto_subtype_to_string(proto_subtype));
+#endif
+/*VENDOR_EDIT*/
 	switch (proto_subtype) {
 	case QDF_PROTO_EAPOL_M1:
 	case QDF_PROTO_EAPOL_M2:
@@ -3012,7 +3052,13 @@ static void wma_wake_event_log_reason(t_wma_handle *wma,
 			 wma_wow_wake_reason_str(wake_info->wake_reason),
 			 wake_info->wake_reason);
 	}
-
+//yangmingjin@BSP.POWER.Basic 2019/04/30 add for RM_TAG_POWER_DEBUG
+#ifdef VENDOR_EDIT
+	info_count = 0;
+	info_count += snprintf(host_wakeup_info+info_count, HOST_WAKEUP_INFO_LEN-info_count, "reason[%s] ",
+		wma_wow_wake_reason_str(wake_info->wake_reason));
+#endif
+/*VENDOR_EDIT*/
 	qdf_wow_wakeup_host_event(wake_info->wake_reason);
 	qdf_wma_wow_wakeup_stats_event(wma);
 }
